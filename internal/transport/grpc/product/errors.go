@@ -19,7 +19,8 @@ func MapDomainErrorToGRPC(err error) error {
 	case err == domain.ErrProductNotFound:
 		return status.Error(codes.NotFound, err.Error())
 	case err == domain.ErrProductNotActive, err == domain.ErrInvalidDiscountPeriod,
-		err == domain.ErrProductAlreadyActive, err == domain.ErrProductAlreadyArchived:
+		err == domain.ErrProductAlreadyActive, err == domain.ErrProductAlreadyArchived,
+		err == domain.ErrDiscountAlreadyActive:
 		return status.Error(codes.FailedPrecondition, err.Error())
 	case err == domain.ErrInvalidInput, err == domain.ErrInvalidPrice:
 		return status.Error(codes.InvalidArgument, err.Error())

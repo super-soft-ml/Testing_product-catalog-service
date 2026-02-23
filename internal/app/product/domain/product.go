@@ -167,6 +167,9 @@ func (p *Product) ApplyDiscount(discount *Discount, now time.Time) error {
 	if discount == nil || !discount.IsValidAt(now) {
 		return ErrInvalidDiscountPeriod
 	}
+	if p.discount != nil && p.discount.IsValidAt(now) {
+		return ErrDiscountAlreadyActive
+	}
 	p.discount = discount
 	p.changes.MarkDirty(FieldDiscount)
 	p.events = append(p.events, &DiscountAppliedEvent{ProductID: p.id})

@@ -43,6 +43,7 @@ func (r *ReadModel) GetProduct(ctx context.Context, productID string) (*get_prod
 }
 
 // ListProducts returns paginated products (default filter: active).
+// Total is the total number of matching rows (for pagination), not just the page size.
 func (r *ReadModel) ListProducts(ctx context.Context, req list_products.ListProductsRequest) (*list_products.ListProductsResult, error) {
 	filterStatus := req.Status
 	if filterStatus == "" {
@@ -52,6 +53,28 @@ func (r *ReadModel) ListProducts(ctx context.Context, req list_products.ListProd
 	if limit <= 0 {
 		limit = 20
 	}
+
+	countStmt := spanner.Statement{
+		SQL:    `SELECT COUNT(*) AS total FROM products WHERE status = @status AND archived_at IS NULL`,
+		Params: map[string]interface{}{"status": filterStatus},
+	}
+	if req.Category != "" {
+		countStmt.SQL = `SELECT COUNT(*) AS total FROM products WHERE status = @status AND category = @category AND archived_at IS NULL`
+		countStmt.Params["category"] = req.Category
+	}
+	countIter := r.client.Single().Query(ctx, countStmt)
+	defer countIter.Stop()
+	var total int64
+	countRow, err := countIter.Next()
+	if err != nil && err != iterator.Done {
+		return nil, err
+	}
+	if err != iterator.Done && countRow != nil {
+		if err := countRow.Columns(&total); err != nil {
+			return nil, err
+		}
+	}
+
 	stmt := spanner.Statement{
 		SQL: `SELECT product_id, name, description, category, base_price_numerator, base_price_denominator,
 		      discount_percent, discount_start_date, discount_end_date, status
@@ -64,7 +87,7 @@ func (r *ReadModel) ListProducts(ctx context.Context, req list_products.ListProd
 		            FROM products WHERE status = @status AND category = @category AND archived_at IS NULL`
 		stmt.Params["category"] = req.Category
 	}
-	stmt.SQL += " LIMIT @limit OFFSET @offset"
+	stmt.SQL += " ORDER BY product_id LIMIT @limit OFFSET @offset"
 	stmt.Params["limit"] = int64(limit)
 	stmt.Params["offset"] = int64(req.Offset)
 
@@ -86,7 +109,7 @@ func (r *ReadModel) ListProducts(ctx context.Context, req list_products.ListProd
 		}
 		products = append(products, rowToListDTO(&p))
 	}
-	return &list_products.ListProductsResult{Products: products, Total: int32(len(products))}, nil
+	return &list_products.ListProductsResult{Products: products, Total: int32(total)}, nil
 }
 
 func rowToGetDTO(row *m_product.Product) *get_product.ProductDTO {
